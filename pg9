@@ -1,0 +1,62 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+
+#define SHM_SIZE 1024  // Size of the shared memory segment
+
+int main() {
+    int shmid;        // Shared memory ID
+    key_t key = 1234;  // A unique key to identify the shared memory segment
+
+    // Create a shared memory segment or get an existing one
+    if ((shmid = shmget(key, SHM_SIZE, IPC_CREAT | 0666)) < 0) {
+        perror("shmget");
+        exit(1);
+    }
+
+    // Attach the shared memory segment to the process's address space
+    char *shm = shmat(shmid, NULL, 0);
+    if (shm == (char *)-1) {
+        perror("shmat");
+        exit(1);
+    }
+
+    // Write data to the shared memory
+    strcpy(shm, "Hello, shared memory!");
+
+    // Fork a child process
+    pid_t pid = fork();
+
+    if (pid < 0) {
+        perror("fork");
+        exit(1);
+    } else if (pid == 0) {  // Child process
+        char *child_data = shmat(shmid, NULL, 0);
+        if (child_data == (char *)-1) {
+            perror("shmat");
+            exit(1);
+        }
+
+        printf("Child process reads: %s\n", child_data);
+
+        // Detach the shared memory segment
+        shmdt(child_data);
+    } else {  // Parent process
+        // Wait for the child process to finish
+        wait(NULL);
+
+        printf("Parent process reads: %s\n", shm);
+
+        // Detach the shared memory segment
+        shmdt(shm);
+
+        // Remove the shared memory segment
+        shmctl(shmid, IPC_RMID, NULL);
+    }
+
+    return 0;
+}
